@@ -31,8 +31,52 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
         return jwtClaimsSet;
     }
 
+    //This is the method which can get application attributes using consumer key with SQL JOIN
     @Override
     protected JWTClaimsSet handleTokenBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
+                                               OAuthTokenReqMessageContext tokReqMsgCtx) {
+        String consumerKey = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
+
+
+        log.info("Client ID : " + consumerKey);
+
+
+        Connection connection = null;
+        PreparedStatement prepStmt = null;
+        ResultSet rs = null;
+
+        try {
+            connection = APIMgtDBUtil.getConnection();
+
+            String query = SQLConstants.GET_APPLICATION_ATTRIBUTES_BY_CONSUMER_KEY;
+            prepStmt = connection.prepareStatement(query);
+            prepStmt.setString(1, consumerKey);
+
+            rs = prepStmt.executeQuery();
+
+            if (rs.next()) {
+                String applicationId = rs.getString("APPLICATION_ID");
+                String attributeName = rs.getString("NAME");
+                String attributeValue = rs.getString("VALUE");
+                log.info("Application ID : " + applicationId);
+                log.info("Attribute Name : " + attributeName);
+                log.info("Attribute Value : " + attributeValue);
+            } else {
+                log.error("No Application Found");
+            }
+
+        }catch (SQLException e) {
+            log.error("Error while obtaining application details of the Consumer Key : " + consumerKey, e);
+        } finally {
+            APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
+        }
+
+        return null;
+    }
+
+    //This is the method which can get application attributes using consumer key with two SQL
+    //@Override
+    protected JWTClaimsSet handleTokenBinding_(JWTClaimsSet.Builder jwtClaimsSetBuilder,
                                               OAuthTokenReqMessageContext tokReqMsgCtx) {
         String consumerKey = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
 
@@ -103,48 +147,5 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
         } finally {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
-    }
-
-    //This is the method which can get application attributes using consumer key with SQL JOIN
-    //@Override
-    protected JWTClaimsSet handleTokenBinding_(JWTClaimsSet.Builder jwtClaimsSetBuilder,
-                                                OAuthTokenReqMessageContext tokReqMsgCtx) {
-        String consumerKey = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
-
-
-        log.info("Client ID : " + consumerKey);
-
-
-        Connection connection = null;
-        PreparedStatement prepStmt = null;
-        ResultSet rs = null;
-
-        try {
-            connection = APIMgtDBUtil.getConnection();
-
-            String query = SQLConstants.GET_APPLICATION_ATTRIBUTES_BY_CONSUMER_KEY;
-            prepStmt = connection.prepareStatement(query);
-            prepStmt.setString(1, consumerKey);
-
-            rs = prepStmt.executeQuery();
-
-            if (rs.next()) {
-                String applicationId = rs.getString("APPLICATION_ID");
-                String attributeName = rs.getString("NAME");
-                String attributeValue = rs.getString("VALUE");
-                log.info("Application ID : " + applicationId);
-                log.info("Attribute Name : " + attributeName);
-                log.info("Attribute Value : " + attributeValue);
-            } else {
-                log.error("No Application Found");
-            }
-
-        }catch (SQLException e) {
-            log.error("Error while obtaining application details of the Consumer Key : " + consumerKey, e);
-        } finally {
-            APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
-        }
-
-        return null;
     }
 }
