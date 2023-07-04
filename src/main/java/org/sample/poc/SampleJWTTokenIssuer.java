@@ -23,18 +23,12 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
     public SampleJWTTokenIssuer() throws IdentityOAuth2Exception {
     }
 
-    @Override
-    protected JWTClaimsSet createJWTClaimSet(OAuthAuthzReqMessageContext authAuthzReqMessageContext, OAuthTokenReqMessageContext tokenReqMessageContext, String consumerKey) throws IdentityOAuth2Exception
-    {
-        JWTClaimsSet jwtClaimsSet = super.createJWTClaimSet(authAuthzReqMessageContext, tokenReqMessageContext, consumerKey);
-        JWTClaimsSet sampleJWTClaimsSet = this.handleTokenBinding(new JWTClaimsSet.Builder(), tokenReqMessageContext);
-        return jwtClaimsSet;
-    }
-
     //This is the method which can get application attributes using consumer key with SQL JOIN
     @Override
     protected JWTClaimsSet handleTokenBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
                                                OAuthTokenReqMessageContext tokReqMsgCtx) {
+
+        JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
         String consumerKey = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
 
 
@@ -71,7 +65,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
 
-        return null;
+        return sampleJWTClaimsSet;
     }
 
     //This is the method which can get application attributes using consumer key with two SQL
