@@ -3,13 +3,12 @@ package org.sample.poc;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import com.nimbusds.jwt.JWTClaimsSet;
-import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
-import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.token.JWTTokenIssuer;
 import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.sample.poc.dao.constants.SQLConstants;
 import org.wso2.carbon.apimgt.impl.utils.APIMgtDBUtil;
+import org.wso2.carbon.identity.oauth2.token.bindings.TokenBinding;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,6 +18,8 @@ import java.sql.SQLException;
 public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
     private static final Log log = LogFactory.getLog(SampleJWTTokenIssuer.class);
+    private static final String TOKEN_BINDING_REF = "binding_ref";
+    public static final String REQUEST_BINDING_TYPE = "request";
 
     public SampleJWTTokenIssuer() throws IdentityOAuth2Exception {
     }
@@ -28,11 +29,12 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
     protected JWTClaimsSet handleTokenBinding(JWTClaimsSet.Builder jwtClaimsSetBuilder,
                                                OAuthTokenReqMessageContext tokReqMsgCtx) {
 
-        JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
         String consumerKey = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getClientId();
 
 
         log.info("Client ID : " + consumerKey);
+
+        String bindingRefValue = null;
 
 
         Connection connection = null;
@@ -52,6 +54,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
                 String applicationId = rs.getString("APPLICATION_ID");
                 String attributeName = rs.getString("NAME");
                 String attributeValue = rs.getString("VALUE");
+                bindingRefValue = attributeValue;
                 log.info("Application ID : " + applicationId);
                 log.info("Attribute Name : " + attributeName);
                 log.info("Attribute Value : " + attributeValue);
@@ -65,6 +68,13 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
 
+        setTokenBindingRef(tokReqMsgCtx, bindingRefValue);
+        JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
+
+        if (sampleJWTClaimsSet.getClaims().containsKey(TOKEN_BINDING_REF)) {
+            log.info("binding_ref : " + sampleJWTClaimsSet.getClaims().get(TOKEN_BINDING_REF));
+        }
+
         return sampleJWTClaimsSet;
     }
 
@@ -76,6 +86,8 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
 
         log.info("Client ID : " + consumerKey);
+
+        String bindingRefValue = null;
 
 
         Connection connection = null;
@@ -94,7 +106,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             if (rs.next()) {
                 String applicationId = rs.getString("APPLICATION_ID");
                 log.info("Application ID : " + applicationId);
-                getApplicationAttribute(applicationId);
+                bindingRefValue = getApplicationAttributeValue(applicationId);
             } else {
                 log.error("No Application Found");
             }
@@ -105,15 +117,26 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
 
-        return null;
+        setTokenBindingRef(tokReqMsgCtx, bindingRefValue);
+        JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
+
+        return sampleJWTClaimsSet;
     }
 
-    private void handleException(String msg, Throwable t) throws APIManagementException {
-        log.error(msg, t);
-        throw new APIManagementException(msg, t);
+    private void setTokenBindingRef(OAuthTokenReqMessageContext tokReqMsgCtx, String applicationAttributeValue) {
+
+        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
+
+            tokReqMsgCtx.setTokenBinding(
+                    new TokenBinding(REQUEST_BINDING_TYPE, applicationAttributeValue, applicationAttributeValue));
+        }
     }
 
-    private void getApplicationAttribute(String applicationId){
+
+    private String getApplicationAttributeValue(String applicationId){
+
+        String applicationAttributeValue = null;
+
         Connection connection = null;
         PreparedStatement prepStmt = null;
         ResultSet rs = null;
@@ -129,9 +152,10 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
             if (rs.next()) {
                 String attributeName = rs.getString("NAME");
-                String attributeValue = rs.getString("VALUE");
+                applicationAttributeValue = rs.getString("VALUE");
+
                 log.info("Attribute Name : " + attributeName);
-                log.info("Attribute Value : " + attributeValue);
+                log.info("Attribute Value : " + applicationAttributeValue);
             } else {
                 log.error("No Attributes Found");
             }
@@ -141,5 +165,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
         } finally {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
+
+        return applicationAttributeValue;
     }
 }
