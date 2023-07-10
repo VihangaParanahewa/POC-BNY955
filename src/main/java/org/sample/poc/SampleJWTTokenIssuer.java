@@ -4,11 +4,14 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
+import org.wso2.carbon.identity.oauth2.internal.OAuth2ServiceComponentHolder;
 import org.wso2.carbon.identity.oauth2.token.JWTTokenIssuer;
 import org.wso2.carbon.identity.oauth2.token.OAuthTokenReqMessageContext;
 import org.sample.poc.dao.constants.SQLConstants;
 import org.wso2.carbon.apimgt.impl.utils.APIMgtDBUtil;
 import org.wso2.carbon.identity.oauth2.token.bindings.TokenBinding;
+import org.wso2.carbon.identity.oauth2.util.OAuth2Util;
+import org.wso2.carbon.registry.core.utils.UUIDGenerator;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -34,7 +37,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
         log.info("Client ID : " + consumerKey);
 
-        String bindingRefValue = null;
+        boolean applicationAttributeValue = false;
 
 
         Connection connection = null;
@@ -54,12 +57,12 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
                 String applicationId = rs.getString("APPLICATION_ID");
                 String attributeName = rs.getString("NAME");
                 String attributeValue = rs.getString("VALUE");
-                bindingRefValue = attributeValue;
+                applicationAttributeValue = Boolean.parseBoolean(attributeValue);
                 log.info("Application ID : " + applicationId);
                 log.info("Attribute Name : " + attributeName);
                 log.info("Attribute Value : " + attributeValue);
             } else {
-                log.error("No Application Found");
+                log.info("No Attribute Found For The Application");
             }
 
         }catch (SQLException e) {
@@ -68,7 +71,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
 
-        setTokenBindingRef(tokReqMsgCtx, bindingRefValue);
+        setTokenBindingRef(tokReqMsgCtx, applicationAttributeValue);
         JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
 
         if (sampleJWTClaimsSet.getClaims().containsKey(TOKEN_BINDING_REF)) {
@@ -87,7 +90,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
         log.info("Client ID : " + consumerKey);
 
-        String bindingRefValue = null;
+        boolean applicationAttributeValue = false;
 
 
         Connection connection = null;
@@ -106,7 +109,7 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             if (rs.next()) {
                 String applicationId = rs.getString("APPLICATION_ID");
                 log.info("Application ID : " + applicationId);
-                bindingRefValue = getApplicationAttributeValue(applicationId);
+                applicationAttributeValue = getApplicationAttributeValue(applicationId);
             } else {
                 log.error("No Application Found");
             }
@@ -117,25 +120,38 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
         }
 
-        setTokenBindingRef(tokReqMsgCtx, bindingRefValue);
+        setTokenBindingRef(tokReqMsgCtx, applicationAttributeValue);
         JWTClaimsSet sampleJWTClaimsSet = super.handleTokenBinding(jwtClaimsSetBuilder, tokReqMsgCtx);
+
+        if (sampleJWTClaimsSet.getClaims().containsKey(TOKEN_BINDING_REF)) {
+            log.info("binding_ref : " + sampleJWTClaimsSet.getClaims().get(TOKEN_BINDING_REF));
+        }
 
         return sampleJWTClaimsSet;
     }
 
-    private void setTokenBindingRef(OAuthTokenReqMessageContext tokReqMsgCtx, String applicationAttributeValue) {
+    private void setTokenBindingRef(OAuthTokenReqMessageContext tokReqMsgCtx, Boolean applicationAttributeValue) {
 
-        if (tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
+        boolean renewWithoutRevokingExistingEnabled = applicationAttributeValue;
 
-            tokReqMsgCtx.setTokenBinding(
-                    new TokenBinding(REQUEST_BINDING_TYPE, applicationAttributeValue, applicationAttributeValue));
+        if (renewWithoutRevokingExistingEnabled && tokReqMsgCtx != null && tokReqMsgCtx.getTokenBinding() == null) {
+
+            if (OAuth2ServiceComponentHolder.getJwtRenewWithoutRevokeAllowedGrantTypes()
+                    .contains(tokReqMsgCtx.getOauth2AccessTokenReqDTO().getGrantType())) {
+
+                String tokenBindingValue = UUIDGenerator.generateUUID();
+                tokReqMsgCtx.setTokenBinding(
+                        new TokenBinding(REQUEST_BINDING_TYPE, OAuth2Util.getTokenBindingReference(tokenBindingValue),
+                                tokenBindingValue));
+
+            }
         }
     }
 
 
-    private String getApplicationAttributeValue(String applicationId){
+    private Boolean getApplicationAttributeValue(String applicationId){
 
-        String applicationAttributeValue = null;
+        Boolean applicationAttributeValue = false;
 
         Connection connection = null;
         PreparedStatement prepStmt = null;
@@ -152,12 +168,13 @@ public class SampleJWTTokenIssuer extends JWTTokenIssuer {
 
             if (rs.next()) {
                 String attributeName = rs.getString("NAME");
-                applicationAttributeValue = rs.getString("VALUE");
+                String attributeValue = rs.getString("VALUE");
+                applicationAttributeValue = Boolean.parseBoolean(attributeValue);
 
                 log.info("Attribute Name : " + attributeName);
                 log.info("Attribute Value : " + applicationAttributeValue);
             } else {
-                log.error("No Attributes Found");
+                log.info("No Attribute Found For The Application");
             }
 
         }catch (SQLException e) {
